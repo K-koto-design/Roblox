@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>КОЛИЧ | Messenger</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+    <style>
+        :root {
+            --tg-blue: #0088cc;
+            --bg-chat: #e7ebf0;
+            --white: #ffffff;
+            --text-dark: #222;
+            --admin-color: #ff4757;
+        }
+
+        body { margin: 0; font-family: -apple-system, sans-serif; background: var(--bg-chat); }
+        
+        /* Список чатов */
+        #screen-list { display: flex; flex-direction: column; height: 100vh; }
+        .header { background: var(--tg-blue); color: white; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; }
+        
+        .chat-item { 
+            background: white; padding: 15px; border-bottom: 1px solid #eee; 
+            display: flex; align-items: center; gap: 10px; cursor: pointer;
+        }
+        .chat-avatar { width: 50px; height: 50px; background: #ccc; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; }
+
+        /* Окно чата */
+        #screen-chat { display: none; flex-direction: column; height: 100vh; background: url('https://i.pinimg.com/originals/85/ec/3b/85ec3b72306713028d6896f5b99e909a.jpg'); background-size: cover; }
+        .messages-area { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; }
+        
+        .msg { 
+            max-width: 80%; padding: 8px 12px; border-radius: 12px; position: relative; 
+            background: white; align-self: flex-start; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .msg.my { background: #effdde; align-self: flex-end; }
+        .msg .author { font-size: 11px; font-weight: bold; color: var(--tg-blue); margin-bottom: 3px; }
+        .msg .text { font-size: 15px; word-wrap: break-word; }
+        .msg .reactions { display: flex; gap: 3px; margin-top: 5px; }
+        .reaction { background: rgba(0,0,0,0.05); padding: 2px 5px; border-radius: 10px; font-size: 12px; cursor: pointer; }
+
+        .reply-preview { border-left: 3px solid var(--tg-blue); padding-left: 5px; background: rgba(0,0,0,0.05); font-size: 12px; margin-bottom: 5px; }
+
+        .input-area { background: white; padding: 10px; display: flex; gap: 10px; align-items: center; }
+        input { flex: 1; border: none; padding: 10px; background: #f0f0f0; border-radius: 20px; outline: none; }
+        .btn-send { background: var(--tg-blue); color: white; border: none; padding: 10px 15px; border-radius: 50%; cursor: pointer; }
+
+        .media-link { color: var(--tg-blue); text-decoration: underline; cursor: pointer; }
+        img, video { max-width: 100%; border-radius: 8px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="screen-list">
+        <div class="header">
+            <span>КОЛИЧ Messenger</span>
+            <button onclick="createNewChat()" style="background:none; border:none; color:white; font-size:20px;">+</button>
+        </div>
+        <div id="chats-container"></div>
+    </div>
+
+    <div id="screen-chat">
+        <div class="header">
+            <button onclick="goBack()" style="background:none; border:none; color:white;">←</button>
+            <span id="active-chat-title">Чат</span>
+            <button onclick="showChatSettings()" style="background:none; border:none; color:white;">⋮</button>
+        </div>
+        <div class="messages-area" id="msg-area"></div>
+        
+        <div id="reply-bar" style="display:none; background:#f9f9f9; padding:5px 15px; font-size:12px; border-top:1px solid #ddd;">
+            Ответ на: <span id="reply-text"></span> 
+            <button onclick="cancelReply()">✕</button>
+        </div>
+
+        <div class="input-area" id="input-container">
+            <input type="text" id="msg-input" placeholder="Сообщение...">
+            <button class="btn-send" onclick="sendMessage()">➤</button>
+        </div>
+        <div id="blocked-msg" style="display:none; text-align:center; padding:15px; color:gray;">Вы не можете писать в этот чат</div>
+    </div>
+
+<script>
+    // ТВОИ ДАННЫЕ FIREBASE (Оставь те же, что были в банке)
+    const firebaseConfig = { 
+        apiKey: "AIzaSyA3J7KnUgxUHZigwRKmndm7xyxJeeLCrxg", 
+        databaseURL: "https://webapp-b7149-default-rtdb.europe-west1.firebasedatabase.app", 
+        projectId: "webapp-b7149"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // Переменные приложения
+    let currentUser = { id: "user_" + Math.floor(Math.random()*1000), name: "Админ", role: "admin" }; 
+    let activeChatId = null;
+    let replyToId = null;
+
+    // 1. Создание нового чата/канала
+    function createNewChat() {
+        const title = prompt("Название чата:");
+        const type = prompt("Тип: group (группа) или channel (канал)?");
+        if(!title || !type) return;
+        
+        db.ref('messenger/chats').push({
+            title: title,
+            type: type, // channel или group
+            admin: currentUser.id,
+            members: [currentUser.id]
+        });
+    }
+
+    // 2. Загрузка списка чатов
+    db.ref('messenger/chats').on('value', snap => {
+        const chats = snap.val();
+        const container = document.getElementById('chats-container');
+        container.innerHTML = "";
+        for(let id in chats) {
+            const chat = chats[id];
+            container.innerHTML += `
+                <div class="chat-item" onclick="openChat('${id}', '${chat.title}', '${chat.type}', '${chat.admin}')">
+                    <div class="chat-avatar">${chat.title[0]}</div>
+                    <div>
+                        <div style="font-weight:bold">${chat.title}</div>
+                        <div style="font-size:12px; color:gray">${chat.type === 'channel' ? 'Канал' : 'Группа'}</div>
+                    </div>
+                </div>`;
+        }
+    });
+
+    // 3. Открытие чата
+    function openChat(id, title, type, adminId) {
+        activeChatId = id;
+        document.getElementById('screen-list').style.display = 'none';
+        document.getElementById('screen-chat').style.display = 'flex';
+        document.getElementById('active-chat-title').innerText = title;
+        
+        // Проверка прав (в канале пишет только админ)
+        const canWrite = (type === 'group') || (type === 'channel' && currentUser.id === adminId);
+        document.getElementById('input-container').style.display = canWrite ? 'flex' : 'none';
+        document.getElementById('blocked-msg').style.display = canWrite ? 'none' : 'block';
+
+        loadMessages(id);
+    }
+
+    function goBack() {
+        document.getElementById('screen-list').style.display = 'flex';
+        document.getElementById('screen-chat').style.display = 'none';
+    }
+
+    // 4. Логика сообщений
+    function sendMessage() {
+        const text = document.getElementById('msg-input').value;
+        if(!text) return;
+
+        const msgData = {
+            senderId: currentUser.id,
+            senderName: currentUser.name,
+            text: text,
+            timestamp: Date.now(),
+            replyTo: replyToId
+        };
+
+        db.ref(`messenger/messages/${activeChatId}`).push(msgData);
+        document.getElementById('msg-input').value = "";
+        cancelReply();
+        
+        // Интеграция с Telegram (заглушка)
+        sendToTelegram(text);
+    }
+
+    function loadMessages(chatId) {
+        db.ref(`messenger/messages/${chatId}`).on('value', snap => {
+            const msgs = snap.val();
+            const area = document.getElementById('msg-area');
+            area.innerHTML = "";
+            for(let id in msgs) {
+                const m = msgs[id];
+                const isMy = m.senderId === currentUser.id;
+                
+                let mediaHtml = "";
+                if(m.text.includes("http")) {
+                    if(m.text.match(/\.(jpeg|jpg|gif|png)$/)) mediaHtml = `<img src="${m.text}">`;
+                    if(m.text.match(/\.(mp4|webm)$/)) mediaHtml = `<video controls src="${m.text}"></video>`;
+                }
+
+                area.innerHTML += `
+                    <div class="msg ${isMy ? 'my' : ''}" oncontextmenu="showMsgMenu('${id}', '${m.text}', event); return false;">
+                        <div class="author">${m.senderName}</div>
+                        ${m.replyTo ? `<div class="reply-preview">Ответ на сообщение</div>` : ''}
+                        <div class="text">${m.text}</div>
+                        ${mediaHtml}
+                        <div class="reactions">
+                            <span class="reaction" onclick="addReaction('${id}', '👍')">👍 0</span>
+                        </div>
+                        ${isMy ? `<button onclick="deleteMsg('${id}')" style="font-size:9px; border:none; background:none; color:red;">Удалить</button>` : ''}
+                        <button onclick="setReply('${id}', '${m.text}')" style="font-size:9px; border:none; background:none; color:blue;">Ответить</button>
+                    </div>`;
+            }
+            area.scrollTop = area.scrollHeight;
+        });
+    }
+
+    // 5. Доп. функции
+    function setReply(id, text) {
+        replyToId = id;
+        document.getElementById('reply-bar').style.display = 'block';
+        document.getElementById('reply-text').innerText = text.substring(0, 20) + "...";
+    }
+
+    function cancelReply() { replyToId = null; document.getElementById('reply-bar').style.display = 'none'; }
+
+    function deleteMsg(msgId) {
+        if(confirm("Удалить сообщение?")) db.ref(`messenger/messages/${activeChatId}/${msgId}`).remove();
+    }
+
+    function addReaction(msgId, emoji) {
+        // Здесь можно реализовать счетчик реакций в Firebase
+        alert("Реакция " + emoji + " добавлена");
+    }
+
+    // 6. Телеграм Бот Интеграция
+    function sendToTelegram(msgText) {
+        const botToken = "ТВОЙ_ТОКЕН_БОТА";
+        const chatId = "ТВОЙ_CHAT_ID";
+        if(botToken === "ТВОЙ_ТОКЕН_БОТА") return; // Не отправлять если не настроено
+
+        fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&text=Новое сообщение в КОЛИЧ: ${msgText}`);
+    }
+
+</script>
+</body>
+</html>
