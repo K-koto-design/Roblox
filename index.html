@@ -2,233 +2,231 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>КОЛИЧ | Messenger</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>К-Фреш Доставка</title>
+    
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
 
     <style>
         :root {
-            --tg-blue: #0088cc;
-            --bg-chat: #e7ebf0;
-            --white: #ffffff;
-            --text-dark: #222;
-            --admin-color: #ff4757;
+            --bg-main: #A2C0D4; /* Из твоей палитры */
+            --white: #FFFFFF;
+            --text-dark: #3A3A3A;
+            --soft-blue: #D6E4F0;
+            --radius: 24px;
         }
 
-        body { margin: 0; font-family: -apple-system, sans-serif; background: var(--bg-chat); }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: -apple-system, sans-serif; }
         
-        /* Список чатов */
-        #screen-list { display: flex; flex-direction: column; height: 100vh; }
-        .header { background: var(--tg-blue); color: white; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; }
-        
-        .chat-item { 
-            background: white; padding: 15px; border-bottom: 1px solid #eee; 
-            display: flex; align-items: center; gap: 10px; cursor: pointer;
+        body { background-color: var(--bg-main); color: var(--text-dark); margin: 0; padding: 0; }
+
+        /* Шапка */
+        .header { padding: 20px; text-align: center; }
+        .user-info { font-size: 14px; opacity: 0.8; margin-bottom: 10px; }
+
+        /* Категории */
+        .categories {
+            display: flex; gap: 10px; overflow-x: auto; padding: 0 20px 20px;
+            scrollbar-width: none;
         }
-        .chat-avatar { width: 50px; height: 50px; background: #ccc; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; }
-
-        /* Окно чата */
-        #screen-chat { display: none; flex-direction: column; height: 100vh; background: url('https://i.pinimg.com/originals/85/ec/3b/85ec3b72306713028d6896f5b99e909a.jpg'); background-size: cover; }
-        .messages-area { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; }
-        
-        .msg { 
-            max-width: 80%; padding: 8px 12px; border-radius: 12px; position: relative; 
-            background: white; align-self: flex-start; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        .cat-btn {
+            background: var(--white); border: none; padding: 10px 18px;
+            border-radius: 15px; white-space: nowrap; font-weight: 600;
         }
-        .msg.my { background: #effdde; align-self: flex-end; }
-        .msg .author { font-size: 11px; font-weight: bold; color: var(--tg-blue); margin-bottom: 3px; }
-        .msg .text { font-size: 15px; word-wrap: break-word; }
-        .msg .reactions { display: flex; gap: 3px; margin-top: 5px; }
-        .reaction { background: rgba(0,0,0,0.05); padding: 2px 5px; border-radius: 10px; font-size: 12px; cursor: pointer; }
+        .cat-btn.active { background: var(--text-dark); color: white; }
 
-        .reply-preview { border-left: 3px solid var(--tg-blue); padding-left: 5px; background: rgba(0,0,0,0.05); font-size: 12px; margin-bottom: 5px; }
+        /* Товары */
+        .products {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 20px 120px;
+        }
+        .card {
+            background: var(--white); border-radius: var(--radius); padding: 12px;
+            display: flex; flex-direction: column; align-items: center; text-align: center;
+        }
+        .card-img { font-size: 40px; margin-bottom: 10px; }
+        .card-price { font-weight: 800; font-size: 18px; margin: 5px 0; }
+        .add-btn {
+            background: var(--soft-blue); border: none; width: 100%;
+            padding: 8px; border-radius: 12px; font-weight: bold;
+        }
 
-        .input-area { background: white; padding: 10px; display: flex; gap: 10px; align-items: center; }
-        input { flex: 1; border: none; padding: 10px; background: #f0f0f0; border-radius: 20px; outline: none; }
-        .btn-send { background: var(--tg-blue); color: white; border: none; padding: 10px 15px; border-radius: 50%; cursor: pointer; }
+        /* Корзина (Кнопка внизу) */
+        .main-button {
+            position: fixed; bottom: 20px; left: 20px; right: 20px;
+            background: var(--text-dark); color: white; border-radius: 20px;
+            padding: 18px; display: none; justify-content: space-between;
+            font-weight: bold; z-index: 100;
+        }
 
-        .media-link { color: var(--tg-blue); text-decoration: underline; cursor: pointer; }
-        img, video { max-width: 100%; border-radius: 8px; margin-top: 5px; }
+        /* Окно подтверждения К-Онлайн */
+        .modal {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(10px); z-index: 200; align-items: flex-end;
+        }
+        .modal-content {
+            background: var(--white); width: 100%; border-radius: 30px 30px 0 0;
+            padding: 25px; animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+        .btn-pay {
+            background: var(--bg-main); border: none; width: 100%; padding: 18px;
+            border-radius: 18px; font-weight: 800; font-size: 16px; margin-top: 15px;
+        }
     </style>
 </head>
 <body>
 
-    <div id="screen-list">
-        <div class="header">
-            <span>КОЛИЧ Messenger</span>
-            <button onclick="createNewChat()" style="background:none; border:none; color:white; font-size:20px;">+</button>
-        </div>
-        <div id="chats-container"></div>
+    <div class="header">
+        <div class="user-info" id="user-name">Привет! 👋</div>
+        <h1 style="margin:0">К-Фреш 🥗</h1>
     </div>
 
-    <div id="screen-chat">
-        <div class="header">
-            <button onclick="goBack()" style="background:none; border:none; color:white;">←</button>
-            <span id="active-chat-title">Чат</span>
-            <button onclick="showChatSettings()" style="background:none; border:none; color:white;">⋮</button>
-        </div>
-        <div class="messages-area" id="msg-area"></div>
-        
-        <div id="reply-bar" style="display:none; background:#f9f9f9; padding:5px 15px; font-size:12px; border-top:1px solid #ddd;">
-            Ответ на: <span id="reply-text"></span> 
-            <button onclick="cancelReply()">✕</button>
-        </div>
+    <div class="categories">
+        <button class="cat-btn active" onclick="setFilter('all')">Все</button>
+        <button class="cat-btn" onclick="setFilter('pizza')">🍕 Пицца</button>
+        <button class="cat-btn" onclick="setFilter('rolls')">🍣 Роллы</button>
+        <button class="cat-btn" onclick="setFilter('shaurma')">🌯 Шавуха</button>
+        <button class="cat-btn" onclick="setFilter('coffee')">☕ Кофе</button>
+        <button class="cat-btn" onclick="setFilter('drinks')">🥤 Напитки</button>
+    </div>
 
-        <div class="input-area" id="input-container">
-            <input type="text" id="msg-input" placeholder="Сообщение...">
-            <button class="btn-send" onclick="sendMessage()">➤</button>
+    <div class="products" id="product-list"></div>
+
+    <div class="main-button" id="cart-button" onclick="openCheckout()">
+        <span id="cart-count">0 товаров</span>
+        <span id="cart-total">0 ₽</span>
+    </div>
+
+    <div class="modal" id="pay-modal">
+        <div class="modal-content">
+            <h2 style="margin-top:0">Оплата К-Онлайн</h2>
+            <div id="order-items-list" style="margin-bottom: 15px; font-size: 14px; opacity: 0.8;"></div>
+            <div style="background: var(--soft-blue); padding: 15px; border-radius: 15px;">
+                <div style="display:flex; justify-content:space-between">
+                    <span>Твой баланс:</span> <b id="user-bal">...</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size: 20px; margin-top: 5px;">
+                    <span>Итого:</span> <b id="pay-total">0 ₽</b>
+                </div>
+            </div>
+            <button class="btn-pay" id="pay-confirm-btn" onclick="confirmPayment()">Оплатить сейчас</button>
+            <div style="text-align:center; padding: 15px; opacity: 0.5" onclick="closeModal()">Отмена</div>
         </div>
-        <div id="blocked-msg" style="display:none; text-align:center; padding:15px; color:gray;">Вы не можете писать в этот чат</div>
     </div>
 
 <script>
-    // ТВОИ ДАННЫЕ FIREBASE (Оставь те же, что были в банке)
-    const firebaseConfig = { 
-        apiKey: "AIzaSyA3J7KnUgxUHZigwRKmndm7xyxJeeLCrxg", 
-        databaseURL: "https://webapp-b7149-default-rtdb.europe-west1.firebasedatabase.app", 
-        projectId: "webapp-b7149"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+    tg.headerColor = "#A2C0D4";
 
-    // Переменные приложения
-    let currentUser = { id: "user_" + Math.floor(Math.random()*1000), name: "Админ", role: "admin" }; 
-    let activeChatId = null;
-    let replyToId = null;
+    const config = { databaseURL: "https://webapp-b7149-default-rtdb.europe-west1.firebasedatabase.app" };
+    firebase.initializeApp(config);
+    const rtdb = firebase.database();
 
-    // 1. Создание нового чата/канала
-    function createNewChat() {
-        const title = prompt("Название чата:");
-        const type = prompt("Тип: group (группа) или channel (канал)?");
-        if(!title || !type) return;
-        
-        db.ref('messenger/chats').push({
-            title: title,
-            type: type, // channel или group
-            admin: currentUser.id,
-            members: [currentUser.id]
+    const menu = [
+        { id: 1, cat: 'pizza', name: 'Пепперони', price: 650, ico: '🍕' },
+        { id: 2, cat: 'rolls', name: 'Филадельфия', price: 480, ico: '🍣' },
+        { id: 3, cat: 'shaurma', name: 'Шавуха в лаваше', price: 240, ico: '🌯' },
+        { id: 4, cat: 'coffee', name: 'Латте', price: 180, ico: '☕' },
+        { id: 5, cat: 'drinks', name: 'Кола 0.5', price: 90, ico: '🥤' },
+        { id: 6, cat: 'pizza', name: 'Мясная', price: 720, ico: '🥓' },
+        { id: 7, cat: 'rolls', name: 'Дракон', price: 520, ico: '🐉' },
+        { id: 8, cat: 'coffee', name: 'Американо', price: 120, ico: '☕' }
+    ];
+
+    let cart = [];
+    let currentFilter = 'all';
+    let currentUser = null;
+
+    function render() {
+        const list = document.getElementById('product-list');
+        list.innerHTML = '';
+        menu.filter(p => currentFilter === 'all' || p.cat === currentFilter).forEach(p => {
+            list.innerHTML += `
+                <div class="card">
+                    <div class="card-img">${p.ico}</div>
+                    <div style="font-size:14px; font-weight:600">${p.name}</div>
+                    <div class="card-price">${p.price} ₽</div>
+                    <button class="add-btn" onclick="addToCart(${p.id})">В корзину</button>
+                </div>
+            `;
         });
     }
 
-    // 2. Загрузка списка чатов
-    db.ref('messenger/chats').on('value', snap => {
-        const chats = snap.val();
-        const container = document.getElementById('chats-container');
-        container.innerHTML = "";
-        for(let id in chats) {
-            const chat = chats[id];
-            container.innerHTML += `
-                <div class="chat-item" onclick="openChat('${id}', '${chat.title}', '${chat.type}', '${chat.admin}')">
-                    <div class="chat-avatar">${chat.title[0]}</div>
-                    <div>
-                        <div style="font-weight:bold">${chat.title}</div>
-                        <div style="font-size:12px; color:gray">${chat.type === 'channel' ? 'Канал' : 'Группа'}</div>
-                    </div>
-                </div>`;
+    function addToCart(id) {
+        tg.HapticFeedback.impactOccurred('light');
+        cart.push(menu.find(p => p.id === id));
+        updateCart();
+    }
+
+    function updateCart() {
+        const btn = document.getElementById('cart-button');
+        if (cart.length > 0) {
+            btn.style.display = 'flex';
+            document.getElementById('cart-count').innerText = `${cart.length} товаров`;
+            document.getElementById('cart-total').innerText = cart.reduce((s, p) => s + p.price, 0) + ' ₽ >';
         }
-    });
+    }
 
-    // 3. Открытие чата
-    function openChat(id, title, type, adminId) {
-        activeChatId = id;
-        document.getElementById('screen-list').style.display = 'none';
-        document.getElementById('screen-chat').style.display = 'flex';
-        document.getElementById('active-chat-title').innerText = title;
+    function openCheckout() {
+        const userId = tg.initDataUnsafe?.user?.id || "6348425176"; 
+        tg.HapticFeedback.selectionChanged();
         
-        // Проверка прав (в канале пишет только админ)
-        const canWrite = (type === 'group') || (type === 'channel' && currentUser.id === adminId);
-        document.getElementById('input-container').style.display = canWrite ? 'flex' : 'none';
-        document.getElementById('blocked-msg').style.display = canWrite ? 'none' : 'block';
-
-        loadMessages(id);
-    }
-
-    function goBack() {
-        document.getElementById('screen-list').style.display = 'flex';
-        document.getElementById('screen-chat').style.display = 'none';
-    }
-
-    // 4. Логика сообщений
-    function sendMessage() {
-        const text = document.getElementById('msg-input').value;
-        if(!text) return;
-
-        const msgData = {
-            senderId: currentUser.id,
-            senderName: currentUser.name,
-            text: text,
-            timestamp: Date.now(),
-            replyTo: replyToId
-        };
-
-        db.ref(`messenger/messages/${activeChatId}`).push(msgData);
-        document.getElementById('msg-input').value = "";
-        cancelReply();
-        
-        // Интеграция с Telegram (заглушка)
-        sendToTelegram(text);
-    }
-
-    function loadMessages(chatId) {
-        db.ref(`messenger/messages/${chatId}`).on('value', snap => {
-            const msgs = snap.val();
-            const area = document.getElementById('msg-area');
-            area.innerHTML = "";
-            for(let id in msgs) {
-                const m = msgs[id];
-                const isMy = m.senderId === currentUser.id;
-                
-                let mediaHtml = "";
-                if(m.text.includes("http")) {
-                    if(m.text.match(/\.(jpeg|jpg|gif|png)$/)) mediaHtml = `<img src="${m.text}">`;
-                    if(m.text.match(/\.(mp4|webm)$/)) mediaHtml = `<video controls src="${m.text}"></video>`;
+        rtdb.ref('clients').once('value', (snap) => {
+            const users = snap.val();
+            for (let key in users) {
+                if (String(users[key].telegramId) === String(userId)) {
+                    currentUser = { ...users[key], fbKey: key };
+                    break;
                 }
-
-                area.innerHTML += `
-                    <div class="msg ${isMy ? 'my' : ''}" oncontextmenu="showMsgMenu('${id}', '${m.text}', event); return false;">
-                        <div class="author">${m.senderName}</div>
-                        ${m.replyTo ? `<div class="reply-preview">Ответ на сообщение</div>` : ''}
-                        <div class="text">${m.text}</div>
-                        ${mediaHtml}
-                        <div class="reactions">
-                            <span class="reaction" onclick="addReaction('${id}', '👍')">👍 0</span>
-                        </div>
-                        ${isMy ? `<button onclick="deleteMsg('${id}')" style="font-size:9px; border:none; background:none; color:red;">Удалить</button>` : ''}
-                        <button onclick="setReply('${id}', '${m.text}')" style="font-size:9px; border:none; background:none; color:blue;">Ответить</button>
-                    </div>`;
             }
-            area.scrollTop = area.scrollHeight;
+            if (!currentUser) return alert("Вы не зарегистрированы в К-Онлайн!");
+            
+            showModal();
         });
     }
 
-    // 5. Доп. функции
-    function setReply(id, text) {
-        replyToId = id;
-        document.getElementById('reply-bar').style.display = 'block';
-        document.getElementById('reply-text').innerText = text.substring(0, 20) + "...";
+    function showModal() {
+        document.getElementById('pay-modal').style.display = 'flex';
+        document.getElementById('user-bal').innerText = currentUser.balance + " ₽";
+        const total = cart.reduce((s, p) => s + p.price, 0);
+        document.getElementById('pay-total').innerText = total + " ₽";
+        document.getElementById('order-items-list').innerText = cart.map(i => i.name).join(', ');
     }
 
-    function cancelReply() { replyToId = null; document.getElementById('reply-bar').style.display = 'none'; }
+    function confirmPayment() {
+        const total = cart.reduce((s, p) => s + p.price, 0);
+        if (currentUser.balance < total) return alert("Мало денег!");
 
-    function deleteMsg(msgId) {
-        if(confirm("Удалить сообщение?")) db.ref(`messenger/messages/${activeChatId}/${msgId}`).remove();
+        tg.HapticFeedback.notificationOccurred('success');
+        const newBalance = currentUser.balance - total;
+
+        rtdb.ref(`clients/${currentUser.fbKey}`).update({ balance: newBalance }).then(() => {
+            rtdb.ref(`history/${currentUser.fbKey}`).push({
+                title: 'Оплата К-Фреш', val: total, type: 'minus', ico: '🥗', date: new Date().toLocaleString()
+            });
+            alert("Заказ оформлен! Приятного аппетита!");
+            location.reload();
+        });
     }
 
-    function addReaction(msgId, emoji) {
-        // Здесь можно реализовать счетчик реакций в Firebase
-        alert("Реакция " + emoji + " добавлена");
+    function setFilter(c) {
+        currentFilter = c;
+        document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+        render();
     }
 
-    // 6. Телеграм Бот Интеграция
-    function sendToTelegram(msgText) {
-        const botToken = "ТВОЙ_ТОКЕН_БОТА";
-        const chatId = "ТВОЙ_CHAT_ID";
-        if(botToken === "ТВОЙ_ТОКЕН_БОТА") return; // Не отправлять если не настроено
+    function closeModal() { document.getElementById('pay-modal').style.display = 'none'; }
 
-        fetch(`https://api.telegram.org/bot${botToken}/sendMessage?chat_id=${chatId}&text=Новое сообщение в КОЛИЧ: ${msgText}`);
+    if (tg.initDataUnsafe?.user) {
+        document.getElementById('user-name').innerText = `Привет, ${tg.initDataUnsafe.user.first_name}! 👋`;
     }
 
+    render();
 </script>
 </body>
 </html>
